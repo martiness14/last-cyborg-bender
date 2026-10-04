@@ -52,6 +52,9 @@ void fragment() {
 		var text_node := Art.label(logo,item[0],Vector3(0,item[1],0.08),106,item[2],0.0046)
 		text_node.outline_size = 10
 		text_node.rotation.z = 0.025 if item[0]=="CHAYKA" else -0.025
+	var badge := Art.label(logo,"+ КИБОРГ\nБЕНДЪРИ!",Vector3(1.02,0.40,0.1),40,Art.ORANGE,0.0032)
+	badge.outline_size = 8
+	badge.rotation.z = -0.22
 	Art.label(self,"СПАСЕНИЕТО НА ДЕСНИСЛАВА",Vector3(0,-0.055,0.1),31,Art.ORANGE,0.0028)
 	Art.label(self,"Съдбата е в твоите ръце",Vector3(0,-0.19,0.1),25,Art.CREAM,0.0026)
 	bubbles = MultiMeshInstance3D.new()

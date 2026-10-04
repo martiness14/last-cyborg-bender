@@ -57,8 +57,10 @@ static func cone(st: SurfaceTool, pos: Vector3, size: Vector3, color: Color, rot
 	primitive(st,mesh,pos,size,color,rotation)
 
 static func build_meshes(type: int) -> Dictionary:
-	var skin: Color = [Color("a6c843"),Color("e59056"),Color("a887bb")][type]
-	var cloth: Color = [Color("785947"),Color("437b90"),Color("5f7878")][type]
+	var skin: Color = [Color("a6c843"),Color("e59056"),Color("a887bb"),Color("aab6bd")][type]
+	var cloth: Color = [Color("785947"),Color("437b90"),Color("5f7878"),Color("3d4852")][type]
+	var glow := Color("ff4a3d")
+	var core := Color("5ef2ff")
 	var meshes := {}
 	for part in ["body","head","arm_l","arm_r","leg_l","leg_r"]:
 		var st := SurfaceTool.new()
@@ -75,6 +77,12 @@ static func build_meshes(type: int) -> Dictionary:
 			if type == 2:
 				block(st,Vector3(0,0.67,0.33),Vector3(0.23,0.22,0.025),Art.CREAM,0.18)
 				block(st,Vector3(0,0.67,0.35),Vector3(0.13,0.035,0.018),Art.INK,0.18)
+			if type == 3:
+				# Chest plate with a glowing reactor core.
+				block(st,Vector3(0,0.70,0.31),Vector3(0.30,0.26,0.04),Color("7d8a93"))
+				orb(st,Vector3(0,0.70,0.34),Vector3.ONE*0.075,core)
+				for side in [-1,1]:
+					orb(st,Vector3(side*0.11,0.60,0.33),Vector3.ONE*0.022,glow)
 		elif part == "head":
 			orb(st,Vector3.ZERO,Vector3(0.39,0.34,0.29),skin)
 			for side in [-1,1]:
@@ -94,6 +102,15 @@ static func build_meshes(type: int) -> Dictionary:
 					orb(st,Vector3(side*0.067,-0.012,0.437),Vector3(0.022,0.034,0.012),Art.INK)
 				orb(st,Vector3(0,0.28,-0.01),Vector3(0.38,0.10,0.28),Color("708a91"))
 				block(st,Vector3(0,0.31,0),Vector3(0.32,0.07,0.10),Art.INK)
+			elif type == 3:
+				# Red visor across the eyes, metal skull cap, bolts and an antenna.
+				block(st,Vector3(0,0.085,0.385),Vector3(0.54,0.19,0.05),Art.INK)
+				block(st,Vector3(0,0.085,0.405),Vector3(0.48,0.10,0.03),glow)
+				orb(st,Vector3(0,0.22,-0.01),Vector3(0.37,0.16,0.28),Color("7d8a93"))
+				for side in [-1,1]:
+					orb(st,Vector3(side*0.36,-0.04,0.06),Vector3.ONE*0.045,Color("56616a"))
+				block(st,Vector3(0.10,0.46,-0.02),Vector3(0.03,0.22,0.03),Color("c9d3d8"))
+				orb(st,Vector3(0.10,0.57,-0.02),Vector3.ONE*0.04,glow)
 			else:
 				for n in range(4):
 					cone(st,Vector3(-0.20+n*0.12,0.32,-0.05),Vector3(0.10,0.13+n*0.012,0.13),Art.INK,Vector3(-0.3,0,-0.3))
@@ -111,6 +128,9 @@ static func build_meshes(type: int) -> Dictionary:
 				orb(st,Vector3(0,-0.24,0.19),Vector3(0.25,0.32,0.055),Art.INK)
 				orb(st,Vector3(0,-0.24,0.235),Vector3(0.21,0.27,0.025),Art.BLUE)
 				orb(st,Vector3(0,-0.24,0.26),Vector3.ONE*0.075,Art.YELLOW)
+			if side == 1 and type == 3:
+				block(st,Vector3(0,-0.30,0.17),Vector3(0.13,0.13,0.42),Color("56616a"))
+				orb(st,Vector3(0,-0.30,0.40),Vector3(0.075,0.075,0.03),core)
 			if side == -1 and type == 2:
 				block(st,Vector3(0,-0.46,0.13),Vector3(0.27,0.3,0.27),Color("6b8996"))
 				orb(st,Vector3(0,-0.30,0.13),Vector3(0.15,0.035,0.15),Color("bfda4b"))

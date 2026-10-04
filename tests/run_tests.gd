@@ -1,6 +1,7 @@
 extends SceneTree
 const Rules = preload("res://scripts/rules.gd")
 const Gestures = preload("res://scripts/gestures.gd")
+const Sound = preload("res://scripts/sound.gd")
 var checks := 0
 var integration_completed := false
 var failures: Array[String] = []
@@ -244,6 +245,35 @@ func run() -> void:
 		var height := 0.12*sin(float(i)*TAU/120.0)
 		full_cycles += int(g.update({"valid":false},hand(Vector3(0,height,0)),1.0/120).stroke)
 	check(full_cycles==1,"One physical up-down cycle counts once, not twice")
+	var cyborgs = Rules.new(4)
+	cyborgs.reset()
+	var cyborg: Dictionary = cyborgs.spawn_enemy(3)
+	check(cyborg.kind==3 and cyborg.scale>1.0 and cyborg.speed>0.72,"Cyborg bender spawns as its own faster, larger type")
+	var wave_one_cyborg := false
+	for n in range(60):
+		wave_one_cyborg = wave_one_cyborg or cyborgs.spawn_enemy().kind==3
+	check(not wave_one_cyborg,"First wave has no cyborgs")
+	cyborgs.wave = 3
+	var later_cyborg := false
+	for n in range(60):
+		later_cyborg = later_cyborg or cyborgs.spawn_enemy().kind==3
+	check(later_cyborg,"Cyborgs join random spawns from the second wave")
+	cyborgs.wave = Rules.LAST_WAVE
+	cyborgs.remaining_spawns = 1
+	var boss: Dictionary = cyborgs.spawn_enemy()
+	check(boss.boss and boss.kind==3 and boss.hp==22.0,"Final boss is the cyborg bender")
+	var armoured = Rules.new(5)
+	armoured.reset()
+	armoured.remaining_spawns = 0
+	armoured.spawn_clock = 99
+	var target: Dictionary = armoured.spawn_enemy(3)
+	target.pos = Vector3(0,0,-3)
+	var full_hp: float = target.hp
+	armoured.shots.append({"id":900,"pos":Vector3(0,0.8,-2.6),"vel":Vector3(0,0,-8),"life":2.5,"damage":1.0})
+	armoured.tick(0.1)
+	check(absf(full_hp-target.hp-0.6)<0.0001,"Cyborg body armour absorbs part of a hit")
+	var anthem: AudioStreamWAV = Sound.build_anthem()
+	check(anthem.get_length()>15.0 and anthem.get_length()<25.0,"Cyborg boss theme renders at full length")
 	await integration()
 	check(integration_completed,"Integration suite reaches completion without runtime abort")
 	var report := {"checks":checks,"passed":checks-failures.size(),"failures":failures,"physical_quest_test":false}
@@ -302,6 +332,23 @@ func integration() -> void:
 	check(main.rules.state=="defeat" and main.ui.visible,"Defeat opens gesture result menu")
 	main._activate_button("start")
 	check(main.rules.health==100 and main.enemy_nodes.is_empty(),"Gesture restart clears enemies and restores health")
+	main.rules.spawn_enemy(3)
+	main._sync_game(0.016)
+	var cyborg_rig = main.enemy_nodes.values()[0].model
+	check(cyborg_rig.kind==3 and cyborg_rig.parts.size()==6,"Cyborg enemy produces an articulated 3D rig")
+	main.rules.elapsed = main.CYBORG_ENTRANCE_AT
+	main._start_cyborg_entrance()
+	var frozen_time: float = main.rules.elapsed
+	var frozen_pos: Vector3 = main.rules.enemies[0].pos
+	for n in range(60):
+		main._update_cyborg_entrance(0.05)
+	check(main.cyborg_end<INF and main.cyborg_show.scale.is_equal_approx(Vector3.ONE),"Cyborg boss rises, then its theme starts")
+	check(main.rules.elapsed==frozen_time and main.rules.enemies[0].pos==frozen_pos,"Fight is frozen during the cyborg entrance")
+	for n in range(600):
+		if main.cyborg_time < 0.0:
+			break
+		main._update_cyborg_entrance(0.05)
+	check(main.cyborg_time<0.0 and main.cyborg_show==null and main.cyborg_seen,"Cyborg entrance ends and the fight resumes")
 	# Drive the actual XRServer sampling path using known raw joint poses.
 	var trackers: Array[XRHandTracker] = []
 	for h in range(2):

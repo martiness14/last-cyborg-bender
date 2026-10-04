@@ -225,7 +225,7 @@ func tick(delta: float, paused: bool = false) -> void:
 				e.slow = 1.8
 				event.emit("block", {})
 			else:
-				damage(12 if e.kind != 1 else 20)
+				damage(20 if e.kind == 1 else (16 if e.kind == 3 else 12))
 				e.hp = 0
 				e.death = 0.1
 				if state == "defeat":
@@ -250,7 +250,9 @@ func tick(delta: float, paused: bool = false) -> void:
 			var radius: float = 0.49 * e.scale
 			if closest.distance_to(center) < radius:
 				var headshot: bool = closest.y > e.height * 0.65
-				e.hp -= shot.get("damage",1.0) * (2.0 if headshot else 1.0) * (0.5 if e.kind == 1 and not headshot else 1.0)
+				# Orange brutes and cyborgs are armoured; the head stays the weak point.
+				var armour: float = 1.0 if headshot else (0.5 if e.kind == 1 else (0.6 if e.kind == 3 else 1.0))
+				e.hp -= shot.get("damage",1.0) * (2.0 if headshot else 1.0) * armour
 				e.flash = 0.15
 				e.slow = 1.0
 				shot.life = 0
@@ -287,18 +289,22 @@ func tick(delta: float, paused: bool = false) -> void:
 
 func spawn_enemy(forced_kind: int = -1) -> Dictionary:
 	var kind: int = forced_kind if forced_kind >= 0 else (rng.randi_range(0, mini(2, wave - 1)))
+	# Cyborgs join from the second wave onwards.
+	if forced_kind < 0 and wave >= 2 and rng.randf() < 0.3:
+		kind = 3
 	var lane: int = rng.randi_range(0, 2)
 	var positions := [Vector3(-3.0, 0, -5.8), Vector3(0, 0, -7.0), Vector3(3.0, 0, -5.8)]
-	var size: float = 1.25 if kind == 1 else 1.0
+	var size: float = 1.25 if kind == 1 else (1.12 if kind == 3 else 1.0)
 	var boss: bool = wave == LAST_WAVE and remaining_spawns == 1
 	if boss:
 		size = 1.65
-		kind = 1
-	var hp: float = (3.0 if kind == 0 else 5.0) + wave * 0.4
+		kind = 3
+	var hp: float = (3.0 if kind == 0 else (4.5 if kind == 3 else 5.0)) + wave * 0.4
 	if boss:
 		hp = 22.0
+	var base_speed: float = 0.50 if kind == 1 else (0.72 if kind == 3 else 0.65)
 	var e := {"id": next_id, "kind": kind, "pos": positions[lane], "hp": hp, "max_hp": hp,
-		"height": 1.55 * size, "scale": size, "speed": (0.50 if kind == 1 else 0.65) + wave * 0.045,
+		"height": 1.55 * size, "scale": size, "speed": base_speed + wave * 0.045,
 		"slow": 0.0, "flash": 0.0, "death": 0.65, "age": 0.0, "throw_clock": 2.2, "boss": boss}
 	next_id += 1
 	enemies.append(e)
@@ -311,7 +317,7 @@ func kill_enemy(e: Dictionary, critical: bool) -> void:
 	kills += 1
 	combo = mini(5, combo + 1)
 	combo_time = 3.0
-	var points: int = (150 if e.kind == 1 else 100) * combo + (50 if critical else 0)
+	var points: int = (150 if e.kind == 1 else (175 if e.kind == 3 else 100)) * combo + (50 if critical else 0)
 	if e.boss:
 		points += 1000
 	score += points

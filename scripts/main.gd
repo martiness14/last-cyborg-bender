@@ -54,6 +54,15 @@ var pause_caption: Label3D
 var pause_hover := 0.0
 var pressure_fill: MeshInstance3D
 var title_revealed := false
+## One-time cyborg boss entrance after a minute of real fighting.
+const CYBORG_ENTRANCE_AT := 65.0
+const CYBORG_RISE := 2.5
+var cyborg_seen := false
+var cyborg_show: Node3D
+var cyborg_model
+var cyborg_label: Label3D
+var cyborg_time := -1.0
+var cyborg_end := INF
 
 func _ready() -> void:
 	# Desktop automation is explicitly gated off on Android. Shipping input is hands only.
@@ -62,6 +71,7 @@ func _ready() -> void:
 	var config := ConfigFile.new()
 	if config.load("user://scores.cfg") == OK:
 		best = int(config.get_value("arcade","best",0))
+		cyborg_seen = bool(config.get_value("arcade","cyborg_entrance",false))
 	xr_origin = XROrigin3D.new()
 	add_child(xr_origin)
 	camera = XRCamera3D.new()
@@ -193,6 +203,8 @@ func _process(delta: float) -> void:
 			show_menu()
 	elif rules.state in ["menu","victory","defeat"] or paused:
 		_menu_input(sample,input)
+	elif cyborg_time >= 0.0:
+		_update_cyborg_entrance(delta)
 	else:
 		_pause_input(sample,input,delta)
 		if tracking_ready and not paused:
@@ -209,11 +221,13 @@ func _process(delta: float) -> void:
 			rules.shield = false
 		rules.tick(delta,not tracking_ready or paused)
 		_sync_game(delta)
+		if not cyborg_seen and rules.state == "playing" and tracking_ready and not paused and rules.elapsed >= CYBORG_ENTRANCE_AT:
+			_start_cyborg_entrance()
 	_update_tracking_notice(right_tracked)
 	if not tracking_ready:
 		shield_visual.visible = false
 		pointer_line.visible = false
-	hud_board.visible = rules.state in ["playing","break"] and not paused
+	hud_board.visible = rules.state in ["playing","break"] and not paused and cyborg_time < 0.0
 	pause_button.visible = hud_board.visible
 	_update_effects(delta if tracking_ready and not paused else 0)
 	if desktop_demo:
@@ -381,6 +395,8 @@ func _activate_button(id: String) -> void:
 	audio.play("menu")
 
 func start_game() -> void:
+	if cyborg_time >= 0.0:
+		_end_cyborg_entrance()
 	_clear_enemies()
 	ui.visible = false
 	pointer.visible = false
@@ -395,6 +411,73 @@ func start_game() -> void:
 	gestures.reset_motion()
 	rules.reset()
 	toast("Десен юмрук нагоре–надолу. Насочи пяната. Пази дома!",4.0)
+
+func _start_cyborg_entrance() -> void:
+	cyborg_seen = true
+	cyborg_time = 0.0
+	cyborg_end = INF
+	rules.shield = false
+	shield_visual.visible = false
+	pause_hover = 0.0
+	if save_scores and not desktop_demo:
+		var save := ConfigFile.new()
+		save.load("user://scores.cfg")
+		save.set_value("arcade","cyborg_entrance",true)
+		save.save("user://scores.cfg")
+	cyborg_show = Node3D.new()
+	level.add_child(cyborg_show)
+	cyborg_show.position = Vector3(0,0,-5.2)
+	cyborg_show.scale = Vector3.ONE*0.01
+	cyborg_model = EnemyModel.new()
+	cyborg_show.add_child(cyborg_model)
+	cyborg_model.setup(3,2.0)
+	# Head-locked banner: the room ceiling would hide a label above the giant.
+	cyborg_label = Art.label(camera,"КИБОРГ БЕНДЪР",Vector3(0,0.45,-1.7),72,Art.ORANGE)
+	cyborg_label.outline_size = 10
+	toast("!!! ВНИМАНИЕ: КИБОРГ БЕНДЪР !!!",CYBORG_RISE)
+	audio.play("wave")
+	print("CHAYKA CYBORG ENTRANCE")
+
+func _update_cyborg_entrance(delta: float) -> void:
+	var before := cyborg_time
+	cyborg_time += delta
+	var t := cyborg_time
+	# The fight is frozen while the boss makes its entrance.
+	rules.shield = false
+	rules.tick(delta,true)
+	_sync_game(0.0)
+	if t < CYBORG_RISE:
+		cyborg_show.scale = Vector3.ONE*maxf(0.01,ease(t/CYBORG_RISE,0.4))
+		if int(before/0.5) != int(t/0.5):
+			audio.play("overheat")
+	elif cyborg_end == INF:
+		cyborg_show.scale = Vector3.ONE
+		audio.play_anthem()
+		cyborg_end = t+audio.anthem_length()+0.3
+	# Dance on the 113 BPM beat.
+	var beat := t*TAU*113.0/60.0
+	cyborg_show.rotation.z = sin(beat*0.5)*0.12
+	cyborg_show.position.y = absf(sin(beat*0.5))*0.25
+	cyborg_model.animate(t*1.4,false,0.0,true)
+	cyborg_model.parts.arm_l.rotation.z = -2.3+sin(beat)*0.45
+	cyborg_model.parts.arm_r.rotation.z = 2.3-sin(beat)*0.45
+	cyborg_label.modulate = Art.YELLOW if fmod(t*113.0/60.0,1.0) < 0.5 else Art.ORANGE
+	if t >= cyborg_end:
+		_end_cyborg_entrance()
+
+func _end_cyborg_entrance() -> void:
+	audio.stop_anthem()
+	if cyborg_show:
+		cyborg_show.queue_free()
+		cyborg_label.queue_free()
+	cyborg_show = null
+	cyborg_model = null
+	cyborg_label = null
+	cyborg_time = -1.0
+	cyborg_end = INF
+	stable_tracking = 0
+	gestures.reset_motion()
+	toast("Киборгът ще се върне… Пази дома!",3.0)
 
 func _projectile_batch(count: int, color: Color, radius: float = 0.09) -> MultiMeshInstance3D:
 	var sphere := SphereMesh.new()
@@ -500,7 +583,7 @@ func _sync_game(delta: float) -> void:
 		visual.root.rotation.y = atan2(-e.pos.x,-e.pos.z)
 		visual.model.animate(e.age,rules.rage>0,e.flash,e.kind!=2 or e.pos.length()>4.5)
 		visual.bar.scale.x = maxf(0.01,e.hp/e.max_hp)
-		visual.caption.text = "ШЕФЪТ НА МРЪСОТИЯТА" if e.boss else ("ЯРОСТ!" if rules.rage>0 else "")
+		visual.caption.text = "КИБОРГ БЕНДЪР" if e.boss else ("ЯРОСТ!" if rules.rage>0 else "")
 		if e.hp <= 0:
 			visual.root.scale = Vector3.ONE * maxf(0.01,e.death/0.65)
 			visual.root.rotation.z += delta*4
@@ -543,7 +626,7 @@ func _on_event(kind: String, data: Dictionary) -> void:
 			last_liquid_sound = clock
 	match kind:
 		"menu": show_menu()
-		"wave": toast("ВЪЛНА %d • %d нашественици" % [data.wave,data.count],3)
+		"wave": toast("ВЪЛНА %d • %d нашественици%s" % [data.wave,data.count," + КИБОРГИ!" if data.wave==2 else ""],3)
 		"taunt": toast("+40 ПЯНА • РАЗГНЕВИ ГИ ЗА 6 СЕК!")
 		"clap":
 			toast("ГОЛЯМОТО ИЗПИРАНЕ!")
