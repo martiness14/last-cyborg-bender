@@ -279,7 +279,7 @@ func run() -> void:
 	var report := {"checks":checks,"passed":checks-failures.size(),"failures":failures,"physical_quest_test":false}
 	var file := FileAccess.open("res://qa/tests.json",FileAccess.WRITE)
 	file.store_string(JSON.stringify(report,"\t"))
-	print("CHAYKA TESTS ",JSON.stringify(report))
+	print("KIBORG TESTS ",JSON.stringify(report))
 	quit(0 if failures.is_empty() else 1)
 
 func integration() -> void:
