@@ -82,10 +82,13 @@ func play_anthem() -> void:
 	_finish_anthem_task()
 	if not anthem:
 		return
-	AudioServer.set_bus_mute(0,false)
-	AudioServer.set_bus_volume_db(0,0.0)
+	unmute_master()
 	anthem_player.stream = anthem
 	anthem_player.play()
+
+func unmute_master() -> void:
+	AudioServer.set_bus_mute(0,false)
+	AudioServer.set_bus_volume_db(0,0.0)
 
 func stop_anthem() -> void:
 	anthem_player.stop()

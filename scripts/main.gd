@@ -63,6 +63,12 @@ var cyborg_model
 var cyborg_label: Label3D
 var cyborg_time := -1.0
 var cyborg_end := INF
+var cyborg_stage: Node3D
+var cyborg_lights: Array[Dictionary] = []
+const BOSS_VIDEO := "res://assets/boss_intro.ogv"
+const BOSS_VIDEO_LOOPS := 3
+var cyborg_video: VideoStreamPlayer
+const DISCO := [Color("ff3fa4"),Color("3fd2ff"),Color("ffe14a"),Color("7dff6a"),Color("b06bff")]
 
 func _ready() -> void:
 	# Desktop automation is explicitly gated off on Android. Shipping input is hands only.
@@ -426,14 +432,15 @@ func _start_cyborg_entrance() -> void:
 		save.save("user://scores.cfg")
 	cyborg_show = Node3D.new()
 	level.add_child(cyborg_show)
-	cyborg_show.position = Vector3(0,0,-5.2)
+	cyborg_show.position = Vector3(0,0,-5.2) if not ResourceLoader.exists(BOSS_VIDEO) else Vector3(1.75,0,-4.6)
 	cyborg_show.scale = Vector3.ONE*0.01
 	cyborg_model = EnemyModel.new()
 	cyborg_show.add_child(cyborg_model)
-	cyborg_model.setup(3,2.0)
+	cyborg_model.setup(3,2.0 if not ResourceLoader.exists(BOSS_VIDEO) else 1.6)
 	# Head-locked banner: the room ceiling would hide a label above the giant.
 	cyborg_label = Art.label(camera,"КИБОРГ БЕНДЪР",Vector3(0,0.45,-1.7),72,Art.ORANGE)
 	cyborg_label.outline_size = 10
+	_dress_cyborg()
 	toast("!!! ВНИМАНИЕ: КИБОРГ БЕНДЪР !!!",CYBORG_RISE)
 	audio.play("wave")
 	print("CHAYKA CYBORG ENTRANCE")
@@ -446,14 +453,27 @@ func _update_cyborg_entrance(delta: float) -> void:
 	rules.shield = false
 	rules.tick(delta,true)
 	_sync_game(0.0)
+	# Clear the floor for the giant: frozen invaders step out of sight until the number ends.
+	for visual in enemy_nodes.values():
+		visual.root.visible = t < CYBORG_RISE*0.5
 	if t < CYBORG_RISE:
 		cyborg_show.scale = Vector3.ONE*maxf(0.01,ease(t/CYBORG_RISE,0.4))
 		if int(before/0.5) != int(t/0.5):
 			audio.play("overheat")
 	elif cyborg_end == INF:
 		cyborg_show.scale = Vector3.ONE
-		audio.play_anthem()
-		cyborg_end = t+audio.anthem_length()+0.3
+		cyborg_stage.visible = true
+		if cyborg_video:
+			# The intro clip on the big screen carries the music; the synth theme is the fallback.
+			audio.unmute_master()
+			cyborg_video.play()
+			var length := cyborg_video.get_stream_length()
+			cyborg_end = t+(length if length > 0.5 else 7.6)*BOSS_VIDEO_LOOPS+0.3
+		else:
+			audio.play_anthem()
+			cyborg_end = t+audio.anthem_length()+0.3
+	if cyborg_stage.visible:
+		_animate_cyborg_stage(t,delta)
 	# Dance on the 113 BPM beat.
 	var beat := t*TAU*113.0/60.0
 	cyborg_show.rotation.z = sin(beat*0.5)*0.12
@@ -467,9 +487,17 @@ func _update_cyborg_entrance(delta: float) -> void:
 
 func _end_cyborg_entrance() -> void:
 	audio.stop_anthem()
+	if cyborg_video:
+		cyborg_video.stop()
+	cyborg_video = null
 	if cyborg_show:
 		cyborg_show.queue_free()
 		cyborg_label.queue_free()
+		cyborg_stage.queue_free()
+	cyborg_stage = null
+	cyborg_lights.clear()
+	for visual in enemy_nodes.values():
+		visual.root.visible = true
 	cyborg_show = null
 	cyborg_model = null
 	cyborg_label = null
@@ -478,6 +506,128 @@ func _end_cyborg_entrance() -> void:
 	stable_tracking = 0
 	gestures.reset_motion()
 	toast("Киборгът ще се върне… Пази дома!",3.0)
+
+## Showman costume and a disco stage for the boss number.
+func _dress_cyborg() -> void:
+	var hair := Color("7a3f22")
+	var coat := Color("b9a27a")
+	var head: Node3D = cyborg_model.parts.head
+	for item in [[Vector3(0,0.38,0.08),Vector3(0.36,0.18,0.30)],[Vector3(0,0.50,0.17),Vector3(0.30,0.15,0.22)],[Vector3(0,0.33,-0.12),Vector3(0.38,0.18,0.26)]]:
+		var tuft := Art.ball(head,1.0,item[0],hair)
+		tuft.scale = item[1]
+	var body: Node3D = cyborg_model.parts.body
+	Art.box(body,Vector3(0.98,0.95,0.06),Vector3(0,0.62,-0.30),coat)
+	for side in [-1,1]:
+		var lapel := Art.box(body,Vector3(0.17,0.78,0.05),Vector3(side*0.30,0.66,0.27),coat)
+		lapel.rotation.z = side*0.12
+		var tail := Art.box(body,Vector3(0.22,0.55,0.05),Vector3(side*0.36,0.12,0.12),coat)
+		tail.rotation.y = side*0.35
+	var arm: Node3D = cyborg_model.parts.arm_l
+	Art.box(arm,Vector3(0.05,0.30,0.05),Vector3(0,-0.40,0.14),Art.INK)
+	Art.ball(arm,0.075,Vector3(0,-0.24,0.14),Color("3a3f44"))
+	cyborg_stage = Node3D.new()
+	level.add_child(cyborg_stage)
+	cyborg_stage.visible = false
+	_build_cyborg_screen()
+	var center := Vector3(0,0,-5.2)
+	var disco := Node3D.new()
+	cyborg_stage.add_child(disco)
+	disco.position = Vector3(-1.4,2.15,-3.6)
+	Art.ball(disco,0.22,Vector3.ZERO,Color("d9e2e6"))
+	for n in range(18):
+		var facet := Art.box(disco,Vector3(0.07,0.07,0.02),Vector3.ZERO,DISCO[n%DISCO.size()])
+		var dir := Vector3(cos(n*2.399),sin(n*1.3)*0.8,sin(n*2.399)).normalized()
+		facet.position = dir*0.225
+		facet.basis = Basis.looking_at(dir,Vector3.UP if absf(dir.y)<0.95 else Vector3.RIGHT)
+	cyborg_lights.append({"node":disco,"kind":"disco"})
+	for n in range(4):
+		var beam := MeshInstance3D.new()
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.03
+		cone.bottom_radius = 0.45
+		cone.height = 2.6
+		cone.radial_segments = 12
+		beam.mesh = cone
+		var glow := Art.material(Color(DISCO[n],0.16))
+		glow.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		glow.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		glow.cull_mode = BaseMaterial3D.CULL_DISABLED
+		beam.material_override = glow
+		var pivot := Node3D.new()
+		cyborg_stage.add_child(pivot)
+		pivot.position = Vector3((n-1.5)*1.2,2.55,-5.9)
+		pivot.add_child(beam)
+		beam.position = Vector3(0,-1.3,0)
+		cyborg_lights.append({"node":pivot,"kind":"beam","phase":n*1.7,"material":glow,"color":n})
+	for x in range(-2,3):
+		for z in range(-1,2):
+			var tile := Art.box(cyborg_stage,Vector3(0.9,0.02,0.9),center+Vector3(x*0.95,0.015,z*0.95+0.6),DISCO[0])
+			var paint := Art.material(DISCO[0])
+			tile.material_override = paint
+			cyborg_lights.append({"node":tile,"kind":"tile","material":paint,"seed":(x+2)*3+z+1})
+	for n in range(8):
+		var note := Node3D.new()
+		cyborg_stage.add_child(note)
+		var color: Color = DISCO[n%DISCO.size()]
+		var head_ball := Art.ball(note,0.07,Vector3.ZERO,color)
+		head_ball.scale = Vector3(1.25,0.9,0.6)
+		Art.box(note,Vector3(0.022,0.30,0.022),Vector3(0.075,0.15,0),color)
+		Art.box(note,Vector3(0.12,0.03,0.022),Vector3(0.13,0.29,0),color).rotation.z = -0.5
+		cyborg_lights.append({"node":note,"kind":"note","phase":float(n)/8.0,"x":(n-3.5)*0.75})
+
+## Big screen behind the dance floor, fed by a SubViewport with the boss intro clip.
+func _build_cyborg_screen() -> void:
+	if not ResourceLoader.exists(BOSS_VIDEO):
+		return
+	var stream: VideoStream = load(BOSS_VIDEO)
+	if not stream:
+		return
+	var feed := SubViewport.new()
+	feed.size = Vector2i(640,360)
+	feed.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	cyborg_stage.add_child(feed)
+	cyborg_video = VideoStreamPlayer.new()
+	cyborg_video.stream = stream
+	cyborg_video.expand = true
+	cyborg_video.size = Vector2(640,360)
+	cyborg_video.volume_db = 0.0
+	cyborg_video.loop = true
+	feed.add_child(cyborg_video)
+	var screen := Node3D.new()
+	cyborg_stage.add_child(screen)
+	screen.position = Vector3(0,1.32,-6.0)
+	Art.box(screen,Vector3(3.10,1.82,0.06),Vector3(0,0,-0.04),Art.INK)
+	var panel := MeshInstance3D.new()
+	var quad := QuadMesh.new()
+	quad.size = Vector2(2.96,1.665)
+	panel.mesh = quad
+	var picture := Art.material(Color.WHITE)
+	picture.albedo_texture = feed.get_texture()
+	panel.material_override = picture
+	screen.add_child(panel)
+	for side in [-1,1]:
+		Art.box(screen,Vector3(0.08,1.32,0.08),Vector3(side*1.2,-1.32,-0.05),Art.INK)
+
+func _animate_cyborg_stage(t: float, delta: float) -> void:
+	var beats := t*113.0/60.0
+	var step := int(beats)
+	for light in cyborg_lights:
+		var node: Node3D = light.node
+		match light.kind:
+			"disco":
+				node.rotation.y += delta*1.6
+			"beam":
+				node.rotation = Vector3(0.25+sin(t*1.3+light.phase)*0.3,0,cos(t*0.9+light.phase)*0.45)
+				var tint: Color = DISCO[(light.color+step)%DISCO.size()]
+				light.material.albedo_color = Color(tint,0.16)
+			"tile":
+				var lit: bool = (light.seed+step)%3 == 0
+				light.material.albedo_color = DISCO[(light.seed+step)%DISCO.size()] if lit else Art.INK.lightened(0.15)
+			"note":
+				var rise: float = fmod(t*0.35+light.phase,1.0)
+				node.position = Vector3(light.x+sin(t*2.0+light.x)*0.25,0.6+rise*2.0,-4.3)
+				node.rotation.z = sin(t*4.0+light.x)*0.4
+				node.scale = Vector3.ONE*(1.0-absf(rise-0.5)*1.2)
 
 func _projectile_batch(count: int, color: Color, radius: float = 0.09) -> MultiMeshInstance3D:
 	var sphere := SphereMesh.new()

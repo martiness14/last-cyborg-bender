@@ -343,12 +343,15 @@ func integration() -> void:
 	for n in range(60):
 		main._update_cyborg_entrance(0.05)
 	check(main.cyborg_end<INF and main.cyborg_show.scale.is_equal_approx(Vector3.ONE),"Cyborg boss rises, then its theme starts")
+	check(main.cyborg_video!=null and main.cyborg_video.is_playing(),"Boss intro clip plays on the stage screen")
 	check(main.rules.elapsed==frozen_time and main.rules.enemies[0].pos==frozen_pos,"Fight is frozen during the cyborg entrance")
+	check(not main.enemy_nodes.values()[0].root.visible and main.cyborg_stage.visible,"Disco stage replaces the frozen invaders during the number")
 	for n in range(600):
 		if main.cyborg_time < 0.0:
 			break
 		main._update_cyborg_entrance(0.05)
 	check(main.cyborg_time<0.0 and main.cyborg_show==null and main.cyborg_seen,"Cyborg entrance ends and the fight resumes")
+	check(main.enemy_nodes.values()[0].root.visible,"Invaders return after the number")
 	# Drive the actual XRServer sampling path using known raw joint poses.
 	var trackers: Array[XRHandTracker] = []
 	for h in range(2):
