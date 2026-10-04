@@ -17,8 +17,11 @@ void fragment() {
  vec2 p = (UV-0.5)*vec2(1.35,1.0);
  float halo = exp(-dot(p,p)*7.0);
  float stripe = step(0.95, fract(atan(p.y,p.x)*7.0));
- ALBEDO = mix(vec3(0.025,0.052,0.066), vec3(0.07,0.19,0.20), halo);
- ALBEDO += stripe*halo*0.018;
+ vec2 cell = abs(fract(UV*vec2(26.0,17.0))-0.5);
+ float grid = step(0.46,max(cell.x,cell.y));
+ ALBEDO = mix(vec3(0.03,0.03,0.08), vec3(0.16,0.05,0.22), halo);
+ ALBEDO += grid*mix(vec3(0.05,0.35,0.42),vec3(0.55,0.10,0.35),UV.y)*0.35;
+ ALBEDO += stripe*halo*0.03;
 }
 """
 	var mat := ShaderMaterial.new()
@@ -29,11 +32,11 @@ void fragment() {
 	# Quiet framing and rays are baked into one draw call.
 	var art := Art.new()
 	for side in [-1,1]:
-		art.raw_box(Vector3(side*1.93,0.06,-0.1),Vector3(0.014,2.61,0.02),Art.YELLOW.darkened(0.45))
+		art.raw_box(Vector3(side*1.93,0.06,-0.1),Vector3(0.02,2.61,0.02),Art.BLUE)
 		for n in range(4):
-			art.raw_box(Vector3(side*(1.61+n*0.075),0.65-n*0.19,-0.1),Vector3(0.038,0.07,0.02),Art.ORANGE)
+			art.raw_box(Vector3(side*(1.61+n*0.075),0.65-n*0.19,-0.1),Vector3(0.038,0.07,0.02),Art.ORANGE if n%2==0 else Art.BLUE)
 	for y in [-1.30,1.31]:
-		art.raw_box(Vector3(0,y,-0.1),Vector3(3.88,0.014,0.02),Art.YELLOW.darkened(0.45))
+		art.raw_box(Vector3(0,y,-0.1),Vector3(3.88,0.02,0.02),Art.ORANGE)
 	art.surface.generate_normals()
 	var frame := MeshInstance3D.new()
 	frame.mesh = art.surface.commit()
@@ -44,16 +47,19 @@ void fragment() {
 	logo = Node3D.new()
 	add_child(logo)
 	logo.position.y = 0.42
-	var top := Art.label(logo,"LAST",Vector3(0,0.57,0.06),39,Art.CREAM,0.0031)
+	var top := Art.label(logo,"// PROTOCOL 1.0 //",Vector3(0,0.57,0.06),36,Art.BLUE,0.0031)
 	top.outline_size = 6
-	for item in [["CHAYKA",0.23,Art.CREAM],["BENDER",-0.18,Art.YELLOW]]:
-		var shadow := Art.label(logo,item[0],Vector3(0.032,item[1]-0.039,0.025),106,Color("7f4337"),0.0046)
+	for item in [["KIBORG",0.23,Art.CREAM],["BENDER",-0.18,Art.BLUE]]:
+		var shadow := Art.label(logo,item[0],Vector3(0.032,item[1]-0.039,0.025),106,Art.ORANGE.darkened(0.25),0.0046)
 		shadow.outline_size = 13
 		var text_node := Art.label(logo,item[0],Vector3(0,item[1],0.08),106,item[2],0.0046)
 		text_node.outline_size = 10
-		text_node.rotation.z = 0.025 if item[0]=="CHAYKA" else -0.025
-	Art.label(self,"СПАСЕНИЕТО НА ДЕСНИСЛАВА",Vector3(0,-0.055,0.1),31,Art.ORANGE,0.0028)
-	Art.label(self,"Съдбата е в твоите ръце",Vector3(0,-0.19,0.1),25,Art.CREAM,0.0026)
+		text_node.rotation.z = 0.025 if item[0]=="KIBORG" else -0.025
+	var badge := Art.label(logo,"VR • САМО\nС РЪЦЕ",Vector3(1.04,0.40,0.1),36,Art.YELLOW,0.0032)
+	badge.outline_size = 8
+	badge.rotation.z = -0.22
+	Art.label(self,"БУНТЪТ НА МАШИНИТЕ",Vector3(0,-0.055,0.1),31,Art.ORANGE,0.0028)
+	Art.label(self,"Охлади ги. Спри ги. Спаси Деснислава.",Vector3(0,-0.19,0.1),25,Art.CREAM,0.0026)
 	bubbles = MultiMeshInstance3D.new()
 	var mesh := SphereMesh.new()
 	mesh.radius = 0.017
@@ -64,7 +70,7 @@ void fragment() {
 	bubbles.multimesh.transform_format = MultiMesh.TRANSFORM_3D
 	bubbles.multimesh.mesh = mesh
 	bubbles.multimesh.instance_count = 38
-	bubbles.material_override = Art.material(Color("adc8ba"))
+	bubbles.material_override = Art.material(Art.BLUE)
 	add_child(bubbles)
 	if animate_title:
 		logo.scale = Vector3.ONE*0.08

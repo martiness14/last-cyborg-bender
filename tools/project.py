@@ -70,12 +70,12 @@ def setup():
     cache.parent.mkdir(exist_ok=True)
     if not cache.exists() or hashlib.sha256(cache.read_bytes()).hexdigest() != dep["sha256"]:
         print(f"Downloading OpenXR Vendors {dep['version']} from its official release...")
-        request = urllib.request.Request(dep["url"], headers={"User-Agent": "LastChaykaBender-Setup"})
+        request = urllib.request.Request(dep["url"], headers={"User-Agent": "KiborgBender-Setup"})
         with urllib.request.urlopen(request, timeout=120) as response, cache.open("wb") as output:
             shutil.copyfileobj(response, output)
     if hashlib.sha256(cache.read_bytes()).hexdigest() != dep["sha256"]:
         raise RuntimeError("OpenXR download SHA256 mismatch; dependency was not installed")
-    with tempfile.TemporaryDirectory(prefix="chayka-openxr-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="kiborg-openxr-") as temporary:
         with zipfile.ZipFile(cache) as archive:
             extract_safe(archive, Path(temporary))
         source = Path(temporary) / "asset/addons/godotopenxrvendors"
@@ -142,10 +142,10 @@ def main():
         android_template()
         (ROOT / "build").mkdir(exist_ok=True)
         run([engine(), "--headless", "--xr-mode", "off", "--path", ".", "--export-debug",
-             "Quest Pro Hands", "build/LastChaykaBender-Quest.apk"])
+             "Quest Pro Hands", "build/KiborgBender-Quest.apk"])
         run([sys.executable, "tests/verify_apk.py"])
     elif args.command == "install":
-        apk = ROOT / "build/LastChaykaBender-Quest.apk"
+        apk = ROOT / "build/KiborgBender-Quest.apk"
         if not apk.exists():
             raise RuntimeError("Build an APK first, or download the release into build/.")
         adb = tool("adb")

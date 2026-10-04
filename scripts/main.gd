@@ -54,6 +54,21 @@ var pause_caption: Label3D
 var pause_hover := 0.0
 var pressure_fill: MeshInstance3D
 var title_revealed := false
+## One-time cyborg boss entrance after a minute of real fighting.
+const CYBORG_ENTRANCE_AT := 65.0
+const CYBORG_RISE := 2.5
+var cyborg_seen := false
+var cyborg_show: Node3D
+var cyborg_model
+var cyborg_label: Label3D
+var cyborg_time := -1.0
+var cyborg_end := INF
+var cyborg_stage: Node3D
+var cyborg_lights: Array[Dictionary] = []
+const BOSS_VIDEO := "res://assets/boss_intro.ogv"
+const BOSS_VIDEO_LOOPS := 3
+var cyborg_video: VideoStreamPlayer
+const DISCO := [Color("ff3fa4"),Color("3fd2ff"),Color("ffe14a"),Color("7dff6a"),Color("b06bff")]
 
 func _ready() -> void:
 	# Desktop automation is explicitly gated off on Android. Shipping input is hands only.
@@ -62,6 +77,7 @@ func _ready() -> void:
 	var config := ConfigFile.new()
 	if config.load("user://scores.cfg") == OK:
 		best = int(config.get_value("arcade","best",0))
+		cyborg_seen = bool(config.get_value("arcade","cyborg_entrance",false))
 	xr_origin = XROrigin3D.new()
 	add_child(xr_origin)
 	camera = XRCamera3D.new()
@@ -81,9 +97,9 @@ func _ready() -> void:
 			xr_interface.connect("session_stopping", _xr_focus.bind(false))
 			xr_interface.session_begun.connect(_xr_begun)
 			xr_interface.pose_recentered.connect(_recenter)
-		print("CHAYKA XR READY hands-only")
+		print("KIBORG XR READY hands-only")
 	else:
-		print("CHAYKA DESKTOP " + ("DEMO" if desktop_demo else "NO XR - WAITING FOR HANDS"))
+		print("KIBORG DESKTOP " + ("DEMO" if desktop_demo else "NO XR - WAITING FOR HANDS"))
 	hands = Hands.new()
 	hands.origin = xr_origin
 	add_child(hands)
@@ -125,10 +141,10 @@ func _ready() -> void:
 	pressure_fill = Art.box(hud_board,Vector3(1.23,0.021,0.018),Vector3(0,-0.19,0.045),Art.BLUE)
 	shot_batch = _projectile_batch(Rules.MAX_SHOTS,Color("ffffff"),0.012)
 	liquid_batch = _make_liquid_batch()
-	muck_batch = _projectile_batch(32,Color("a1c641"))
+	muck_batch = _projectile_batch(32,Color("3cff9e"))
 	rules.event.connect(_on_event)
 	show_intro()
-	print("CHAYKA READY: intro -> menu -> five waves -> result; no controller bindings")
+	print("KIBORG READY: intro -> menu -> five waves -> result; no controller bindings")
 
 func _xr_focus(value: bool) -> void:
 	focus_ok = value
@@ -139,7 +155,7 @@ func _xr_begun() -> void:
 	var rates: Array = xr_interface.get_available_display_refresh_rates()
 	if 72.0 in rates:
 		xr_interface.set_display_refresh_rate(72.0)
-	print("CHAYKA XR refresh=",xr_interface.get_display_refresh_rate())
+	print("KIBORG XR refresh=",xr_interface.get_display_refresh_rate())
 
 func _recenter() -> void:
 	stable_tracking = 0
@@ -168,7 +184,7 @@ func _process(delta: float) -> void:
 	fps_clock += delta
 	if fps_clock > 5:
 		fps_clock = 0
-		print("CHAYKA FPS ",Engine.get_frames_per_second()," state=",rules.state," enemies=",rules.enemies.size()," hands=",tracking_ready)
+		print("KIBORG FPS ",Engine.get_frames_per_second()," state=",rules.state," enemies=",rules.enemies.size()," hands=",tracking_ready)
 	menu_debounce = maxf(0,menu_debounce-delta)
 	toast_time = maxf(0,toast_time-delta)
 	if toast_time <= 0:
@@ -193,6 +209,8 @@ func _process(delta: float) -> void:
 			show_menu()
 	elif rules.state in ["menu","victory","defeat"] or paused:
 		_menu_input(sample,input)
+	elif cyborg_time >= 0.0:
+		_update_cyborg_entrance(delta)
 	else:
 		_pause_input(sample,input,delta)
 		if tracking_ready and not paused:
@@ -203,17 +221,19 @@ func _process(delta: float) -> void:
 				rules.taunt()
 			if input.get("clap",false):
 				if not rules.clap():
-					toast("Плясъкът иска 55 пяна • изчакай зареждането")
+					toast("ЕМП взривът иска 55 крио • изчакай зареждането")
 			rules.shield = input.get("shield",false) and rules.foam > 0
 		else:
 			rules.shield = false
 		rules.tick(delta,not tracking_ready or paused)
 		_sync_game(delta)
+		if not cyborg_seen and rules.state == "playing" and tracking_ready and not paused and rules.elapsed >= CYBORG_ENTRANCE_AT:
+			_start_cyborg_entrance()
 	_update_tracking_notice(right_tracked)
 	if not tracking_ready:
 		shield_visual.visible = false
 		pointer_line.visible = false
-	hud_board.visible = rules.state in ["playing","break"] and not paused
+	hud_board.visible = rules.state in ["playing","break"] and not paused and cyborg_time < 0.0
 	pause_button.visible = hud_board.visible
 	_update_effects(delta if tracking_ready and not paused else 0)
 	if desktop_demo:
@@ -276,8 +296,8 @@ func show_menu(heading: String = "") -> void:
 		title.build(not title_revealed)
 		title_revealed = true
 		menu_debounce = 1.4
-		Art.label(ui,"Бавно движение ↑↓ зарежда налягането",Vector3(0,-0.38,0.12),24,Art.CREAM)
-		_add_button("start","В БОЯ",Vector2(0,-0.60),Vector2(1.50,0.27),Art.ORANGE)
+		Art.label(ui,"Бавно движение ↑↓ зарежда крио-оръдието",Vector3(0,-0.38,0.12),24,Art.CREAM)
+		_add_button("start","АКТИВИРАЙ",Vector2(0,-0.60),Vector2(1.50,0.27),Art.ORANGE)
 		_add_button("sound","ЗВУК: " + ("ДА" if audio.enabled else "НЕ"),Vector2(0,-0.92),Vector2(0.85,0.16),Color("9bbdc0"))
 		Art.label(ui,"Насочи и щипни   •   Рекорд: %d" % best,Vector3(0,-1.08,0.12),20,Art.CREAM)
 		audio.play("title")
@@ -286,7 +306,7 @@ func show_menu(heading: String = "") -> void:
 		Art.box(ui,Vector3(2.65,1.85,0.06),Vector3.ZERO,Art.INK)
 		Art.box(ui,Vector3(2.57,1.77,0.03),Vector3(0,0,0.04),Art.CREAM)
 		Art.label(ui,heading,Vector3(0,0.68,0.065),47,Art.ORANGE)
-		var instructions := "Десен юмрук ↑↓ → налягане и пяна\nБавно и ритмично → по-силна струя\n10 помпания → плътна струя  •  Лява длан → щит\nСреден пръст → ярост  •  Плясък → взрив"
+		var instructions := "Десен юмрук ↑↓ → налягане и крио-пяна\nБавно и ритмично → по-силен лъч\n10 помпания → плътен лъч  •  Лява длан → енергиен щит\nСреден пръст → претоварване  •  Плясък → ЕМП взрив"
 		Art.label(ui,instructions,Vector3(0,0.18,0.068),29,Art.INK)
 		_add_button("continue","ПРОДЪЛЖИ",Vector2(0,-0.30),Vector2(1.5,0.26),Art.ORANGE)
 		_add_button("sound","ЗВУК: " + ("ДА" if audio.enabled else "НЕ"),Vector2(0,-0.65),Vector2(1.10,0.20),Color("9bbdc0"))
@@ -311,7 +331,7 @@ func _pause_input(sample: Array[Dictionary], input: Dictionary, delta: float) ->
 		paused = true
 		pause_hover = 0
 		show_menu("ПАУЗА")
-		print("CHAYKA PAUSE deliberate_button")
+		print("KIBORG PAUSE deliberate_button")
 
 func _add_button(id: String, caption: String, pos: Vector2, size: Vector2, color: Color) -> void:
 	Art.box(ui,Vector3(size.x+0.035,size.y+0.035,0.03),Vector3(pos.x,pos.y,0.08),Art.INK)
@@ -381,6 +401,8 @@ func _activate_button(id: String) -> void:
 	audio.play("menu")
 
 func start_game() -> void:
+	if cyborg_time >= 0.0:
+		_end_cyborg_entrance()
 	_clear_enemies()
 	ui.visible = false
 	pointer.visible = false
@@ -394,7 +416,218 @@ func start_game() -> void:
 	stable_tracking = 0
 	gestures.reset_motion()
 	rules.reset()
-	toast("Десен юмрук нагоре–надолу. Насочи пяната. Пази дома!",4.0)
+	toast("Десен юмрук нагоре–надолу. Замрази киборгите. Пази базата!",4.0)
+
+func _start_cyborg_entrance() -> void:
+	cyborg_seen = true
+	cyborg_time = 0.0
+	cyborg_end = INF
+	rules.shield = false
+	shield_visual.visible = false
+	pause_hover = 0.0
+	if save_scores and not desktop_demo:
+		var save := ConfigFile.new()
+		save.load("user://scores.cfg")
+		save.set_value("arcade","cyborg_entrance",true)
+		save.save("user://scores.cfg")
+	cyborg_show = Node3D.new()
+	level.add_child(cyborg_show)
+	cyborg_show.position = Vector3(0,0,-5.2) if not ResourceLoader.exists(BOSS_VIDEO) else Vector3(1.75,0,-4.6)
+	cyborg_show.scale = Vector3.ONE*0.01
+	cyborg_model = EnemyModel.new()
+	cyborg_show.add_child(cyborg_model)
+	cyborg_model.setup(3,2.0 if not ResourceLoader.exists(BOSS_VIDEO) else 1.6)
+	# Head-locked banner: the room ceiling would hide a label above the giant.
+	cyborg_label = Art.label(camera,"КИБОРГ БЕНДЪР",Vector3(0,0.45,-1.7),72,Art.ORANGE)
+	cyborg_label.outline_size = 10
+	_dress_cyborg()
+	toast("!!! ВНИМАНИЕ: КИБОРГ БЕНДЪР !!!",CYBORG_RISE)
+	audio.play("wave")
+	print("KIBORG CYBORG ENTRANCE")
+
+func _update_cyborg_entrance(delta: float) -> void:
+	var before := cyborg_time
+	cyborg_time += delta
+	var t := cyborg_time
+	# The fight is frozen while the boss makes its entrance.
+	rules.shield = false
+	rules.tick(delta,true)
+	_sync_game(0.0)
+	# Clear the floor for the giant: frozen invaders step out of sight until the number ends.
+	for visual in enemy_nodes.values():
+		visual.root.visible = t < CYBORG_RISE*0.5
+	if t < CYBORG_RISE:
+		cyborg_show.scale = Vector3.ONE*maxf(0.01,ease(t/CYBORG_RISE,0.4))
+		if int(before/0.5) != int(t/0.5):
+			audio.play("overheat")
+	elif cyborg_end == INF:
+		cyborg_show.scale = Vector3.ONE
+		cyborg_stage.visible = true
+		if cyborg_video:
+			# The intro clip on the big screen carries the music; the synth theme is the fallback.
+			audio.unmute_master()
+			cyborg_video.play()
+			var length := cyborg_video.get_stream_length()
+			cyborg_end = t+(length if length > 0.5 else 7.6)*BOSS_VIDEO_LOOPS+0.3
+		else:
+			audio.play_anthem()
+			cyborg_end = t+audio.anthem_length()+0.3
+	if cyborg_stage.visible:
+		_animate_cyborg_stage(t,delta)
+	# Dance on the 113 BPM beat.
+	var beat := t*TAU*113.0/60.0
+	cyborg_show.rotation.z = sin(beat*0.5)*0.12
+	cyborg_show.position.y = absf(sin(beat*0.5))*0.25
+	cyborg_model.animate(t*1.4,false,0.0,true)
+	cyborg_model.parts.arm_l.rotation.z = -2.3+sin(beat)*0.45
+	cyborg_model.parts.arm_r.rotation.z = 2.3-sin(beat)*0.45
+	cyborg_label.modulate = Art.YELLOW if fmod(t*113.0/60.0,1.0) < 0.5 else Art.ORANGE
+	if t >= cyborg_end:
+		_end_cyborg_entrance()
+
+func _end_cyborg_entrance() -> void:
+	audio.stop_anthem()
+	if cyborg_video:
+		cyborg_video.stop()
+	cyborg_video = null
+	if cyborg_show:
+		cyborg_show.queue_free()
+		cyborg_label.queue_free()
+		cyborg_stage.queue_free()
+	cyborg_stage = null
+	cyborg_lights.clear()
+	for visual in enemy_nodes.values():
+		visual.root.visible = true
+	cyborg_show = null
+	cyborg_model = null
+	cyborg_label = null
+	cyborg_time = -1.0
+	cyborg_end = INF
+	stable_tracking = 0
+	gestures.reset_motion()
+	toast("Бендърът ще се върне… Пази базата!",3.0)
+
+## Showman costume and a disco stage for the boss number.
+func _dress_cyborg() -> void:
+	var hair := Color("7a3f22")
+	var coat := Color("b9a27a")
+	var head: Node3D = cyborg_model.parts.head
+	for item in [[Vector3(0,0.38,0.08),Vector3(0.36,0.18,0.30)],[Vector3(0,0.50,0.17),Vector3(0.30,0.15,0.22)],[Vector3(0,0.33,-0.12),Vector3(0.38,0.18,0.26)]]:
+		var tuft := Art.ball(head,1.0,item[0],hair)
+		tuft.scale = item[1]
+	var body: Node3D = cyborg_model.parts.body
+	Art.box(body,Vector3(0.98,0.95,0.06),Vector3(0,0.62,-0.30),coat)
+	for side in [-1,1]:
+		var lapel := Art.box(body,Vector3(0.17,0.78,0.05),Vector3(side*0.30,0.66,0.27),coat)
+		lapel.rotation.z = side*0.12
+		var tail := Art.box(body,Vector3(0.22,0.55,0.05),Vector3(side*0.36,0.12,0.12),coat)
+		tail.rotation.y = side*0.35
+	var arm: Node3D = cyborg_model.parts.arm_l
+	Art.box(arm,Vector3(0.05,0.30,0.05),Vector3(0,-0.40,0.14),Art.INK)
+	Art.ball(arm,0.075,Vector3(0,-0.24,0.14),Color("3a3f44"))
+	cyborg_stage = Node3D.new()
+	level.add_child(cyborg_stage)
+	cyborg_stage.visible = false
+	_build_cyborg_screen()
+	var center := Vector3(0,0,-5.2)
+	var disco := Node3D.new()
+	cyborg_stage.add_child(disco)
+	disco.position = Vector3(-1.4,2.15,-3.6)
+	Art.ball(disco,0.22,Vector3.ZERO,Color("d9e2e6"))
+	for n in range(18):
+		var facet := Art.box(disco,Vector3(0.07,0.07,0.02),Vector3.ZERO,DISCO[n%DISCO.size()])
+		var dir := Vector3(cos(n*2.399),sin(n*1.3)*0.8,sin(n*2.399)).normalized()
+		facet.position = dir*0.225
+		facet.basis = Basis.looking_at(dir,Vector3.UP if absf(dir.y)<0.95 else Vector3.RIGHT)
+	cyborg_lights.append({"node":disco,"kind":"disco"})
+	for n in range(4):
+		var beam := MeshInstance3D.new()
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.03
+		cone.bottom_radius = 0.45
+		cone.height = 2.6
+		cone.radial_segments = 12
+		beam.mesh = cone
+		var glow := Art.material(Color(DISCO[n],0.16))
+		glow.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		glow.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		glow.cull_mode = BaseMaterial3D.CULL_DISABLED
+		beam.material_override = glow
+		var pivot := Node3D.new()
+		cyborg_stage.add_child(pivot)
+		pivot.position = Vector3((n-1.5)*1.2,2.55,-5.9)
+		pivot.add_child(beam)
+		beam.position = Vector3(0,-1.3,0)
+		cyborg_lights.append({"node":pivot,"kind":"beam","phase":n*1.7,"material":glow,"color":n})
+	for x in range(-2,3):
+		for z in range(-1,2):
+			var tile := Art.box(cyborg_stage,Vector3(0.9,0.02,0.9),center+Vector3(x*0.95,0.015,z*0.95+0.6),DISCO[0])
+			var paint := Art.material(DISCO[0])
+			tile.material_override = paint
+			cyborg_lights.append({"node":tile,"kind":"tile","material":paint,"seed":(x+2)*3+z+1})
+	for n in range(8):
+		var note := Node3D.new()
+		cyborg_stage.add_child(note)
+		var color: Color = DISCO[n%DISCO.size()]
+		var head_ball := Art.ball(note,0.07,Vector3.ZERO,color)
+		head_ball.scale = Vector3(1.25,0.9,0.6)
+		Art.box(note,Vector3(0.022,0.30,0.022),Vector3(0.075,0.15,0),color)
+		Art.box(note,Vector3(0.12,0.03,0.022),Vector3(0.13,0.29,0),color).rotation.z = -0.5
+		cyborg_lights.append({"node":note,"kind":"note","phase":float(n)/8.0,"x":(n-3.5)*0.75})
+
+## Big screen behind the dance floor, fed by a SubViewport with the boss intro clip.
+func _build_cyborg_screen() -> void:
+	if not ResourceLoader.exists(BOSS_VIDEO):
+		return
+	var stream: VideoStream = load(BOSS_VIDEO)
+	if not stream:
+		return
+	var feed := SubViewport.new()
+	feed.size = Vector2i(640,360)
+	feed.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	cyborg_stage.add_child(feed)
+	cyborg_video = VideoStreamPlayer.new()
+	cyborg_video.stream = stream
+	cyborg_video.expand = true
+	cyborg_video.size = Vector2(640,360)
+	cyborg_video.volume_db = 0.0
+	cyborg_video.loop = true
+	feed.add_child(cyborg_video)
+	var screen := Node3D.new()
+	cyborg_stage.add_child(screen)
+	screen.position = Vector3(0,1.32,-6.0)
+	Art.box(screen,Vector3(3.10,1.82,0.06),Vector3(0,0,-0.04),Art.INK)
+	var panel := MeshInstance3D.new()
+	var quad := QuadMesh.new()
+	quad.size = Vector2(2.96,1.665)
+	panel.mesh = quad
+	var picture := Art.material(Color.WHITE)
+	picture.albedo_texture = feed.get_texture()
+	panel.material_override = picture
+	screen.add_child(panel)
+	for side in [-1,1]:
+		Art.box(screen,Vector3(0.08,1.32,0.08),Vector3(side*1.2,-1.32,-0.05),Art.INK)
+
+func _animate_cyborg_stage(t: float, delta: float) -> void:
+	var beats := t*113.0/60.0
+	var step := int(beats)
+	for light in cyborg_lights:
+		var node: Node3D = light.node
+		match light.kind:
+			"disco":
+				node.rotation.y += delta*1.6
+			"beam":
+				node.rotation = Vector3(0.25+sin(t*1.3+light.phase)*0.3,0,cos(t*0.9+light.phase)*0.45)
+				var tint: Color = DISCO[(light.color+step)%DISCO.size()]
+				light.material.albedo_color = Color(tint,0.16)
+			"tile":
+				var lit: bool = (light.seed+step)%3 == 0
+				light.material.albedo_color = DISCO[(light.seed+step)%DISCO.size()] if lit else Art.INK.lightened(0.15)
+			"note":
+				var rise: float = fmod(t*0.35+light.phase,1.0)
+				node.position = Vector3(light.x+sin(t*2.0+light.x)*0.25,0.6+rise*2.0,-4.3)
+				node.rotation.z = sin(t*4.0+light.x)*0.4
+				node.scale = Vector3.ONE*(1.0-absf(rise-0.5)*1.2)
 
 func _projectile_batch(count: int, color: Color, radius: float = 0.09) -> MultiMeshInstance3D:
 	var sphere := SphereMesh.new()
@@ -430,7 +663,7 @@ func _make_liquid_batch() -> MultiMeshInstance3D:
 render_mode unshaded;
 void fragment() {
  float shine = dot(normalize(NORMAL),normalize(vec3(-0.4,0.6,0.7)));
- ALBEDO = mix(vec3(0.70,0.84,0.87),vec3(1.0),smoothstep(-0.4,0.5,shine));
+ ALBEDO = mix(vec3(0.22,0.80,0.98),vec3(0.88,1.0,1.0),smoothstep(-0.4,0.5,shine));
 }
 """
 	var material := ShaderMaterial.new()
@@ -500,7 +733,7 @@ func _sync_game(delta: float) -> void:
 		visual.root.rotation.y = atan2(-e.pos.x,-e.pos.z)
 		visual.model.animate(e.age,rules.rage>0,e.flash,e.kind!=2 or e.pos.length()>4.5)
 		visual.bar.scale.x = maxf(0.01,e.hp/e.max_hp)
-		visual.caption.text = "ШЕФЪТ НА МРЪСОТИЯТА" if e.boss else ("ЯРОСТ!" if rules.rage>0 else "")
+		visual.caption.text = "КИБОРГ БЕНДЪР" if e.boss else ("ПРЕТОВАРЕН!" if rules.rage>0 else "")
 		if e.hp <= 0:
 			visual.root.scale = Vector3.ONE * maxf(0.01,e.death/0.65)
 			visual.root.rotation.z += delta*4
@@ -511,15 +744,15 @@ func _sync_game(delta: float) -> void:
 			enemy_nodes.erase(id)
 	_sync_liquid()
 	_sync_batch(muck_batch,rules.muck)
-	var text := "ВЪЛНА %d / 5     ДОМ %d%%     ТОЧКИ %d\nПЯНА %d%%     НАЛЯГАНЕ %d%%     КОМБО x%d" % [rules.wave,rules.health,rules.score,rules.foam,rules.pressure,maxi(1,rules.combo)]
+	var text := "ВЪЛНА %d / 5     БАЗА %d%%     ТОЧКИ %d\nКРИО %d%%     НАЛЯГАНЕ %d%%     КОМБО x%d" % [rules.wave,rules.health,rules.score,rules.foam,rules.pressure,maxi(1,rules.combo)]
 	if rules.pump_count < 10:
 		text += "\nПОМПАНЕ %d / 10" % rules.pump_count
 	if rules.overheated:
-		text += "\nПРЕГРЯ! Изчакай охлаждането."
+		text += "\nПРЕГРЯВАНЕ! Системата се охлажда."
 	elif rules.state == "break":
-		text += "\nСледваща вълна: %d • Зареди пяна!" % ceili(rules.intermission)
+		text += "\nСледваща вълна: %d • Зареди крио!" % ceili(rules.intermission)
 	elif rules.rage > 0:
-		text += "\nРАЗГНЕВЕНИ: %d сек" % ceili(rules.rage)
+		text += "\nПРЕТОВАРЕНИ: %d сек" % ceili(rules.rage)
 	pressure_fill.scale.x = maxf(0.01,rules.pressure/100.0)
 	pressure_fill.position.x = -0.615*(1.0-rules.pressure/100.0)
 	if text != last_hud:
@@ -543,10 +776,10 @@ func _on_event(kind: String, data: Dictionary) -> void:
 			last_liquid_sound = clock
 	match kind:
 		"menu": show_menu()
-		"wave": toast("ВЪЛНА %d • %d нашественици" % [data.wave,data.count],3)
-		"taunt": toast("+40 ПЯНА • РАЗГНЕВИ ГИ ЗА 6 СЕК!")
+		"wave": toast("ВЪЛНА %d • %d киборга%s" % [data.wave,data.count," + ЕЛИТНИ БЕНДЪРИ!" if data.wave==2 else ""],3)
+		"taunt": toast("+40 КРИО • ПРЕТОВАРИ ГИ ЗА 6 СЕК!")
 		"clap":
-			toast("ГОЛЯМОТО ИЗПИРАНЕ!")
+			toast("ЕМП ВЗРИВ!")
 			_burst(Vector3(0,1.2,-1),18,1.4)
 		"hit": _burst(data.pos,3,0.2)
 		"splash": _burst(data.pos,3,0.18)
@@ -555,11 +788,11 @@ func _on_event(kind: String, data: Dictionary) -> void:
 			var label := Art.label(level,"+%d"%data.points,data.pos,45,Art.YELLOW)
 			label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 			effects.append({"node":label,"life":0.85,"max":0.85,"velocity":Vector3(0,0.8,0)})
-		"damage": toast("ПРОБИВ! −%d ДОМ" % data.amount)
+		"damage": toast("ПРОБИВ! −%d БАЗА" % data.amount)
 		"block": toast("БЛОКИРАНО!",0.6)
-		"overheat": toast("ПРЕГРЯ! Дай си почивка.",2)
-		"cooled": toast("Готова за още пяна.")
-		"break": toast("ЧИСТО! +8 ДОМ • Зареди за следващата вълна",3)
+		"overheat": toast("ПРЕГРЯВАНЕ! Дай си почивка.",2)
+		"cooled": toast("Крио-оръдието е готово.")
+		"break": toast("ЧИСТО! +8 БАЗА • Зареди за следващата вълна",3)
 		"victory","defeat": show_result(kind=="victory")
 
 func _burst(pos: Vector3, count: int, speed: float) -> void:
@@ -593,7 +826,7 @@ func show_result(won: bool) -> void:
 	menu_debounce = 1.0
 	Art.box(ui,Vector3(2.5,1.5,0.05),Vector3.ZERO,Art.INK)
 	Art.box(ui,Vector3(2.42,1.42,0.035),Vector3(0,0,0.04),Art.CREAM)
-	Art.label(ui,"ДЕСНИСЛАВА Е СПАСЕНА!" if won else "ДОМЪТ ПАДНА…",Vector3(0,0.46,0.07),43,Art.ORANGE)
+	Art.label(ui,"МАШИНИТЕ СА СПРЕНИ!" if won else "КИБОРГИТЕ ПРЕВЗЕХА БАЗАТА…",Vector3(0,0.46,0.07),43,Art.ORANGE)
 	Art.label(ui,"Точки: %d  •  Рекорд: %d\nИзчистени: %d  •  Вълна: %d / 5" % [rules.score,best,rules.kills,rules.wave],Vector3(0,0.17,0.07),29,Art.INK)
 	_add_button("start","ОЩЕ ВЕДНЪЖ",Vector2(0,-0.18),Vector2(1.7,0.26),Art.ORANGE)
 	_add_button("menu","МЕНЮ",Vector2(0,-0.50),Vector2(1.2,0.20),Color("a2b96d"))
@@ -656,4 +889,4 @@ func _capture(filename: String) -> void:
 	await RenderingServer.frame_post_draw
 	var image := get_viewport().get_texture().get_image()
 	image.save_png("res://qa/"+filename+".png")
-	print("CHAYKA CAPTURE ",filename)
+	print("KIBORG CAPTURE ",filename)

@@ -1,5 +1,5 @@
 extends Node3D
-## Volumetric cartoon rigs. Meshes are cached by kind; six animated parts per enemy.
+## Volumetric cartoon cyborg rigs. Meshes are cached by kind; six animated parts per enemy.
 const Art = preload("res://scripts/art.gd")
 static var cache: Dictionary = {}
 var parts: Dictionary = {}
@@ -57,67 +57,95 @@ static func cone(st: SurfaceTool, pos: Vector3, size: Vector3, color: Color, rot
 	primitive(st,mesh,pos,size,color,rotation)
 
 static func build_meshes(type: int) -> Dictionary:
-	var skin: Color = [Color("a6c843"),Color("e59056"),Color("a887bb")][type]
-	var cloth: Color = [Color("785947"),Color("437b90"),Color("5f7878")][type]
+	# 0 scout (cyclops eye, energy baton), 1 tank (visor slit, riot shield),
+	# 2 sprayer (goggles, coolant canister), 3 bender elite (red visor, arm blaster).
+	var plate: Color = [Color("8fa3b8"),Color("c7834a"),Color("8a7fb0"),Color("aab6bd")][type]
+	var frame: Color = [Color("26304a"),Color("3a2f2a"),Color("2f2a45"),Color("3d4852")][type]
+	var glow: Color = [Color("2fd3e6"),Color("ff7a2f"),Color("7dff6a"),Color("ff4a3d")][type]
+	var steel := Color("56616a")
+	var core := Color("5ef2ff")
 	var meshes := {}
 	for part in ["body","head","arm_l","arm_r","leg_l","leg_r"]:
 		var st := SurfaceTool.new()
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
 		if part == "body":
-			orb(st,Vector3(0,0.71,0),Vector3(0.43,0.45,0.30),cloth)
-			orb(st,Vector3(0,0.80,0.19),Vector3(0.31,0.29,0.16),skin)
+			orb(st,Vector3(0,0.71,0),Vector3(0.43,0.45,0.30),frame)
+			# Chest armour with a glowing power cell and status lights.
+			block(st,Vector3(0,0.74,0.24),Vector3(0.48,0.36,0.10),plate)
+			block(st,Vector3(0,0.74,0.30),Vector3(0.28,0.22,0.03),Art.INK)
+			orb(st,Vector3(0,0.74,0.32),Vector3.ONE*0.07,glow)
+			for side in [-1,1]:
+				orb(st,Vector3(side*0.18,0.62,0.30),Vector3.ONE*0.022,glow)
+				orb(st,Vector3(side*0.40,0.92,0.0),Vector3(0.14,0.11,0.16),plate)
 			block(st,Vector3(0,0.46,0.02),Vector3(0.76,0.105,0.52),Art.INK)
-			block(st,Vector3(0,0.46,0.299),Vector3(0.15,0.12,0.04),Art.YELLOW)
+			block(st,Vector3(0,0.46,0.299),Vector3(0.15,0.12,0.04),glow)
 			block(st,Vector3(0,0.46,0.325),Vector3(0.085,0.06,0.02),Art.INK)
-			for side in [-1,1]:
-				block(st,Vector3(side*0.21,0.91,0.22),Vector3(0.08,0.40,0.07),cloth,side*0.15)
-				orb(st,Vector3(side*0.21,0.84,0.274),Vector3.ONE*0.028,Art.YELLOW)
 			if type == 2:
-				block(st,Vector3(0,0.67,0.33),Vector3(0.23,0.22,0.025),Art.CREAM,0.18)
-				block(st,Vector3(0,0.67,0.35),Vector3(0.13,0.035,0.018),Art.INK,0.18)
-		elif part == "head":
-			orb(st,Vector3.ZERO,Vector3(0.39,0.34,0.29),skin)
-			for side in [-1,1]:
-				cone(st,Vector3(side*0.42,0.09,-0.01),Vector3(0.14,0.24,0.075),skin,Vector3(0,0,side*-0.95))
-				orb(st,Vector3(side*0.17,0.075,0.245),Vector3(0.157,0.177,0.073),Art.INK)
-				orb(st,Vector3(side*0.17,0.083,0.290),Vector3(0.137,0.152,0.069),Art.CREAM)
-				orb(st,Vector3(side*0.135,0.083,0.350),Vector3(0.054,0.085,0.026),Art.INK)
-				orb(st,Vector3(side*0.135-0.016,0.115,0.373),Vector3.ONE*0.019,Color.WHITE)
-				block(st,Vector3(side*0.17,0.235,0.30),Vector3(0.27,0.055,0.08),Art.INK,side*0.22)
-			orb(st,Vector3(0,-0.12,0.25),Vector3(0.25,0.125,0.082),Art.INK)
-			for tooth in range(5):
-				block(st,Vector3(-0.17+tooth*0.083,-0.069,0.318),Vector3(0.062,0.063,0.025),Art.CREAM,(tooth-2)*0.08)
-			orb(st,Vector3(0,-0.17,0.318),Vector3(0.12,0.035,0.02),Color("d0786c"))
-			orb(st,Vector3(0,-0.015,0.355),Vector3(0.10 if type!=1 else 0.16,0.075,0.09),skin.lightened(0.12))
+				# Coolant tank on the back.
+				orb(st,Vector3(0,0.78,-0.32),Vector3(0.20,0.30,0.14),glow.darkened(0.35))
+				block(st,Vector3(0,0.78,-0.40),Vector3(0.05,0.40,0.05),steel)
 			if type == 1:
 				for side in [-1,1]:
-					orb(st,Vector3(side*0.067,-0.012,0.437),Vector3(0.022,0.034,0.012),Art.INK)
-				orb(st,Vector3(0,0.28,-0.01),Vector3(0.38,0.10,0.28),Color("708a91"))
-				block(st,Vector3(0,0.31,0),Vector3(0.32,0.07,0.10),Art.INK)
-			else:
-				for n in range(4):
-					cone(st,Vector3(-0.20+n*0.12,0.32,-0.05),Vector3(0.10,0.13+n*0.012,0.13),Art.INK,Vector3(-0.3,0,-0.3))
+					cone(st,Vector3(side*0.45,1.02,0),Vector3(0.09,0.14,0.09),steel,Vector3(0,0,side*-0.6))
+		elif part == "head":
+			orb(st,Vector3.ZERO,Vector3(0.37,0.33,0.29),plate)
+			# Jaw plate with a speaker grill instead of teeth.
+			block(st,Vector3(0,-0.15,0.20),Vector3(0.34,0.12,0.16),frame)
+			for n in range(5):
+				block(st,Vector3(-0.12+n*0.06,-0.15,0.285),Vector3(0.025,0.08,0.02),glow.darkened(0.2))
+			for side in [-1,1]:
+				orb(st,Vector3(side*0.37,0.0,0.0),Vector3(0.07,0.11,0.11),steel)
+				orb(st,Vector3(side*0.42,0.0,0.0),Vector3.ONE*0.03,glow)
+			match type:
+				0:
+					orb(st,Vector3(0,0.07,0.23),Vector3(0.21,0.21,0.10),Art.INK)
+					orb(st,Vector3(0,0.07,0.28),Vector3(0.17,0.17,0.08),glow)
+					orb(st,Vector3(0,0.07,0.335),Vector3(0.07,0.07,0.04),Art.INK)
+					orb(st,Vector3(-0.04,0.11,0.36),Vector3.ONE*0.022,Color.WHITE)
+					block(st,Vector3(0,0.36,0),Vector3(0.025,0.22,0.025),steel)
+					orb(st,Vector3(0,0.48,0),Vector3.ONE*0.045,glow)
+				1:
+					orb(st,Vector3(0,0.13,-0.02),Vector3(0.40,0.24,0.31),steel)
+					block(st,Vector3(0,0.06,0.28),Vector3(0.52,0.10,0.06),Art.INK)
+					block(st,Vector3(0,0.06,0.31),Vector3(0.44,0.04,0.03),glow)
+					block(st,Vector3(0,0.33,0),Vector3(0.08,0.12,0.36),frame)
+				2:
+					for side in [-1,1]:
+						orb(st,Vector3(side*0.15,0.08,0.24),Vector3(0.13,0.13,0.08),Art.INK)
+						orb(st,Vector3(side*0.15,0.08,0.28),Vector3(0.10,0.10,0.06),glow)
+						orb(st,Vector3(side*0.15,0.08,0.32),Vector3.ONE*0.035,Art.INK)
+					block(st,Vector3(0,0.08,0.26),Vector3(0.10,0.03,0.04),steel)
+					orb(st,Vector3(0,0.20,-0.01),Vector3(0.30,0.20,0.24),Color(glow.r,glow.g,glow.b).darkened(0.45))
+				3:
+					block(st,Vector3(0,0.085,0.31),Vector3(0.54,0.19,0.05),Art.INK)
+					block(st,Vector3(0,0.085,0.33),Vector3(0.48,0.10,0.03),glow)
+					orb(st,Vector3(0,0.22,-0.01),Vector3(0.37,0.16,0.28),Color("7d8a93"))
+					block(st,Vector3(0.10,0.46,-0.02),Vector3(0.03,0.22,0.03),Color("c9d3d8"))
+					orb(st,Vector3(0.10,0.57,-0.02),Vector3.ONE*0.04,glow)
 		elif part.begins_with("arm"):
 			var side := -1 if part == "arm_l" else 1
-			orb(st,Vector3(0,-0.13,0),Vector3(0.145,0.23,0.145),skin)
-			orb(st,Vector3(0,-0.31,0.04),Vector3(0.16,0.14,0.15),skin)
-			block(st,Vector3(0,-0.22,0),Vector3(0.28,0.07,0.26),cloth)
+			orb(st,Vector3(0,-0.13,0),Vector3(0.13,0.22,0.13),frame)
+			block(st,Vector3(0,-0.14,0),Vector3(0.20,0.20,0.20),plate)
+			orb(st,Vector3(0,-0.31,0.04),Vector3(0.14,0.12,0.14),steel)
+			block(st,Vector3(0,-0.26,0),Vector3(0.24,0.05,0.22),glow.darkened(0.3))
 			if side == -1 and type == 0:
-				block(st,Vector3(0,-0.28,0.19),Vector3(0.055,0.065,0.6),Color("725342"))
-				orb(st,Vector3(0,-0.28,0.50),Vector3(0.15,0.15,0.25),Art.ORANGE)
-				for n in range(5):
-					orb(st,Vector3(sin(n*2.4)*0.11,-0.17,0.37+n*0.06),Vector3.ONE*0.034,Color("b96531"))
+				block(st,Vector3(0,-0.28,0.22),Vector3(0.05,0.05,0.55),Art.INK)
+				block(st,Vector3(0,-0.28,0.42),Vector3(0.08,0.08,0.22),glow)
 			if side == 1 and type == 1:
-				orb(st,Vector3(0,-0.24,0.19),Vector3(0.25,0.32,0.055),Art.INK)
-				orb(st,Vector3(0,-0.24,0.235),Vector3(0.21,0.27,0.025),Art.BLUE)
-				orb(st,Vector3(0,-0.24,0.26),Vector3.ONE*0.075,Art.YELLOW)
+				block(st,Vector3(0,-0.24,0.20),Vector3(0.44,0.58,0.05),Art.INK)
+				block(st,Vector3(0,-0.24,0.23),Vector3(0.38,0.52,0.02),Color("4b5670"))
+				block(st,Vector3(0,-0.24,0.25),Vector3(0.30,0.06,0.02),glow)
 			if side == -1 and type == 2:
-				block(st,Vector3(0,-0.46,0.13),Vector3(0.27,0.3,0.27),Color("6b8996"))
-				orb(st,Vector3(0,-0.30,0.13),Vector3(0.15,0.035,0.15),Color("bfda4b"))
+				block(st,Vector3(0,-0.40,0.15),Vector3(0.10,0.10,0.36),steel)
+				orb(st,Vector3(0,-0.40,0.35),Vector3(0.06,0.06,0.03),glow)
+			if side == 1 and type == 3:
+				block(st,Vector3(0,-0.30,0.17),Vector3(0.13,0.13,0.42),steel)
+				orb(st,Vector3(0,-0.30,0.40),Vector3(0.075,0.075,0.03),core)
 		else:
-			orb(st,Vector3(0,-0.10,0),Vector3(0.15,0.22,0.15),cloth)
+			orb(st,Vector3(0,-0.10,0),Vector3(0.13,0.20,0.13),frame)
+			block(st,Vector3(0,-0.08,0.04),Vector3(0.18,0.16,0.14),plate)
 			orb(st,Vector3(0,-0.24,0.085),Vector3(0.18,0.10,0.235),Art.INK)
-			block(st,Vector3(0,-0.235,0.285),Vector3(0.20,0.06,0.035),Color("716353"))
+			block(st,Vector3(0,-0.235,0.285),Vector3(0.20,0.06,0.035),glow.darkened(0.25))
 		st.index()
 		meshes[part] = st.commit()
 	return meshes
@@ -141,7 +169,7 @@ func setup(type: int, size: float = 1.0) -> void:
 		add_child(mesh)
 		parts[name_key] = mesh
 	scale = Vector3.ONE*size
-	var shadow := Art.ball(self,1.0,Vector3(0,0.012,0),Color("35473b"))
+	var shadow := Art.ball(self,1.0,Vector3(0,0.012,0),Color("0b0f1c"))
 	shadow.scale = Vector3(0.47,0.008,0.34)
 
 func animate(age: float, rage: bool, flash: float, moving: bool = true) -> void:

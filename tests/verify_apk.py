@@ -10,7 +10,7 @@ import subprocess
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-APK = ROOT / 'build/LastChaykaBender-Quest.apk'
+APK = ROOT / 'build/KiborgBender-Quest.apk'
 config_path = ROOT / '.local-tools.json'
 config = json.loads(config_path.read_text()) if config_path.exists() else {}
 aapt = os.environ.get('AAPT') or config.get('aapt') or shutil.which('aapt')
@@ -45,7 +45,7 @@ with zipfile.ZipFile(APK) as archive:
     assert any('main.gd' in n or 'main.tscn' in n or '.pck' in n for n in names)
     assert not any(n.startswith('assets/tests/') or n.startswith('assets/qa/') for n in names)
     assert not any('game-concept' in n or 'PROMPT' in n for n in names)
-report = {'apk': 'build/LastChaykaBender-Quest.apk', 'bytes': APK.stat().st_size,
+report = {'apk': 'build/KiborgBender-Quest.apk', 'bytes': APK.stat().st_size,
           'sha256': hashlib.sha256(APK.read_bytes()).hexdigest(),
           'package': expected_package, 'architecture': 'arm64-v8a',
           'required_hand_tracking': True, 'quest_pro_declared': True,
